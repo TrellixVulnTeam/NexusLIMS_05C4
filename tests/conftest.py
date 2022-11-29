@@ -47,6 +47,32 @@ os.environ['nexusLIMS_path'] = os.path.join(os.path.dirname(__file__),
 # os.environ['mmfnexus_path'] = os.path.join(os.path.dirname(__file__), 'files')
 
 
+def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
+    """
+    Sanitize input before calling `extract()` or `extractall()` to mitigate
+    risk from CVE-2007-4559 <https://nvd.nist.gov/vuln/detail/CVE-2007-4559>
+    """
+    def is_within_directory(directory, target):
+        """
+        Check whether the tarball contains filenames with improper
+        parent-directory sequences (`../`), which can be exploited
+        """
+        abs_directory = os.path.abspath(directory)
+        abs_target = os.path.abspath(target)
+
+        prefix = os.path.commonprefix([abs_directory, abs_target])
+
+        return prefix == abs_directory
+
+
+    for member in tar.getmembers():
+        member_path = os.path.join(path, member.name)
+        if not is_within_directory(path, member_path):
+            raise Exception("Attempted Path Traversal in Tar File")
+
+    tar.extractall(path, members, numeric_owner=numeric_owner)
+
+
 def pytest_configure(config):
     """
     Allows plugins and conftest files to perform initial configuration.
@@ -57,25 +83,6 @@ def pytest_configure(config):
     when importing the instruments.py module (for instrument_db)
     """
     with tarfile.open(tars['DB'], 'r:gz') as tar:
-        def is_within_directory(directory, target):
-            
-            abs_directory = os.path.abspath(directory)
-            abs_target = os.path.abspath(target)
-        
-            prefix = os.path.commonprefix([abs_directory, abs_target])
-            
-            return prefix == abs_directory
-        
-        def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
-        
-            for member in tar.getmembers():
-                member_path = os.path.join(path, member.name)
-                if not is_within_directory(path, member_path):
-                    raise Exception("Attempted Path Traversal in Tar File")
-        
-            tar.extractall(path, members, numeric_owner=numeric_owner) 
-            
-        
         safe_extract(tar, path=os.path.dirname(tars["DB"]))
 
 
@@ -88,25 +95,6 @@ def pytest_sessionstart(session):
     """
     for _, tarf in tars.items():
         with tarfile.open(tarf, 'r:gz') as tar:
-            def is_within_directory(directory, target):
-                
-                abs_directory = os.path.abspath(directory)
-                abs_target = os.path.abspath(target)
-            
-                prefix = os.path.commonprefix([abs_directory, abs_target])
-                
-                return prefix == abs_directory
-            
-            def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
-            
-                for member in tar.getmembers():
-                    member_path = os.path.join(path, member.name)
-                    if not is_within_directory(path, member_path):
-                        raise Exception("Attempted Path Traversal in Tar File")
-            
-                tar.extractall(path, members, numeric_owner=numeric_owner) 
-                
-            
             safe_extract(tar, path=os.path.dirname(tarf))
 
 
